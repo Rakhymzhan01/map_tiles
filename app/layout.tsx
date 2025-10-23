@@ -5,7 +5,7 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "North Kazakhstan Soil Data Visualization",
+  title: "North Kazakhstan Oblast Soil Data Visualization",
   description: "Interactive map showing soil moisture and temperature data for North Kazakhstan Oblast, Kazakhstan",
 };
 

@@ -7,7 +7,7 @@ import path from 'path';
  */
 export async function fetchNorthKazakhstanBoundary() {
   try {
-    console.log('🗺️ Loading North Kazakhstan boundary from local GeoJSON file...');
+    console.log('🗺️ Loading North Kazakhstan Oblast boundary from local GeoJSON file...');
     
     // Read the GeoJSON file directly from the filesystem (server-side)
     const filePath = path.join(process.cwd(), 'public', 'geoBoundaries-KAZ-ADM1.geojson');
@@ -46,7 +46,7 @@ export async function fetchNorthKazakhstanBoundary() {
       geometry: northKazakhstan.geometry
     };
     
-    console.log(`✅ North Kazakhstan boundary loaded successfully!`);
+    console.log(`✅ North Kazakhstan Oblast boundary loaded successfully!`);
     console.log(`📍 ISO: ${boundary.properties.iso}`);
     console.log(`📍 Boundary points: ${boundary.geometry.coordinates[0].length}`);
     console.log(`📍 Source: ${boundary.properties.source}`);

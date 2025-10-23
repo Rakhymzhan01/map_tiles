@@ -90,6 +90,89 @@ export async function fetchSoilData(
   }
 }
 
+export interface ForecastDataPoint {
+  lat: number;
+  lon: number;
+  value: number;
+  date: string;
+  time: string;
+}
+
+export interface SoilForecastResult {
+  lat: number;
+  lon: number;
+  forecast: ForecastDataPoint[];
+}
+
+/**
+ * Fetch soil forecast data for multiple days
+ */
+export async function fetchSoilForecast(
+  point: GridPoint,
+  layer: LayerType,
+  forecastDays: number = 7
+): Promise<SoilForecastResult | null> {
+  try {
+    const parameter = layer === 'moisture' 
+      ? 'soil_moisture_10_to_40cm'
+      : 'soil_temperature_10_to_40cm';
+    
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${point.lat}&longitude=${point.lon}&hourly=${parameter}&forecast_days=${forecastDays}&timezone=Asia/Almaty`;
+    
+    const response = await fetch(url);
+    
+    if (!response.ok) {
+      console.warn(`Failed to fetch forecast for ${point.lat}, ${point.lon}: ${response.status}`);
+      return null;
+    }
+    
+    const data = await response.json();
+    
+    if (!data.hourly || !data.hourly[parameter]) {
+      console.warn(`No forecast data available for ${point.lat}, ${point.lon}`);
+      return null;
+    }
+    
+    // Group by day (take noon value for each day as representative)
+    const dailyData: ForecastDataPoint[] = [];
+    const times = data.hourly.time;
+    const values = data.hourly[parameter];
+    
+    for (let i = 0; i < times.length; i += 24) {
+      // Take value at 12:00 (noon) for each day
+      const noonIndex = i + 12;
+      if (noonIndex < values.length && values[noonIndex] !== null) {
+        let processedValue = values[noonIndex];
+        
+        // Handle data format conversion for moisture
+        if (parameter.includes('moisture')) {
+          if (processedValue >= 0 && processedValue <= 1) {
+            processedValue = processedValue * 100; // Convert to percentage
+          }
+        }
+        
+        dailyData.push({
+          lat: point.lat,
+          lon: point.lon,
+          date: times[noonIndex].split('T')[0], // YYYY-MM-DD
+          time: times[noonIndex],
+          value: processedValue
+        });
+      }
+    }
+    
+    return {
+      lat: point.lat,
+      lon: point.lon,
+      forecast: dailyData
+    };
+    
+  } catch (error) {
+    console.error(`Error fetching forecast for ${point.lat}, ${point.lon}:`, error);
+    return null;
+  }
+}
+
 export async function fetchAllSoilData(
   points: GridPoint[],
   layer: LayerType

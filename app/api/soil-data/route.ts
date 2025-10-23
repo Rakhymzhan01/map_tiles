@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generatePavlodarGrid } from '@/lib/gridGenerator';
-import { fetchAllSoilData, LayerType } from '@/lib/openMeteoClient';
+import { fetchAllSoilData, fetchSoilForecast, LayerType } from '@/lib/openMeteoClient';
+import { fetchNorthKazakhstanBoundary } from '@/lib/fetchBoundary';
 import { cache } from '@/lib/cache';
 import { SoilDataApiResponse } from '@/types/soilData';
 
@@ -8,6 +9,8 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const layer = searchParams.get('layer') as LayerType;
+    const forecastDays = parseInt(searchParams.get('days') || '1');
+    const selectedDay = parseInt(searchParams.get('day') || '0'); // 0 = today
     
     if (!layer || (layer !== 'moisture' && layer !== 'temperature')) {
       return NextResponse.json(
@@ -16,6 +19,60 @@ export async function GET(request: NextRequest) {
       );
     }
     
+    // Check if this is a forecast request (more than 1 day or specific day selected)
+    const isForecast = forecastDays > 1 || selectedDay > 0;
+    
+    if (isForecast) {
+      console.log(`📅 Fetching ${forecastDays}-day forecast (showing day ${selectedDay}) for ${layer}`);
+      
+      // Load North Kazakhstan Oblast boundary
+      const boundary = await fetchNorthKazakhstanBoundary();
+      
+      // Generate grid points inside North Kazakhstan Oblast
+      const gridPoints = generatePavlodarGrid(0.2, boundary);
+      console.log(`Generated ${gridPoints.length} grid points for forecast`);
+      
+      // Fetch forecast for all grid points
+      const forecastPromises = gridPoints.map(point => 
+        fetchSoilForecast(point, layer, forecastDays)
+      );
+      
+      const forecastData = await Promise.all(forecastPromises);
+      
+      // Extract data for selected day and prepare response
+      const validForecasts = forecastData.filter(f => f !== null);
+      const soilData = validForecasts
+        .filter(forecast => forecast!.forecast[selectedDay])
+        .map(forecast => ({
+          lat: forecast!.lat,
+          lon: forecast!.lon,
+          value: forecast!.forecast[selectedDay].value,
+          timestamp: forecast!.forecast[selectedDay].time,
+          date: forecast!.forecast[selectedDay].date,
+          allDays: forecast!.forecast // Include all days for trend calculation
+        }));
+      
+      // Get available dates from first forecast
+      const dates = validForecasts[0]?.forecast.map(f => f.date) || [];
+      
+      const response = {
+        data: soilData,
+        layer,
+        timestamp: new Date().toISOString(),
+        totalPoints: gridPoints.length,
+        validPoints: soilData.length,
+        forecast: {
+          totalDays: forecastDays,
+          selectedDay: selectedDay,
+          dates: dates
+        }
+      };
+      
+      console.log(`Successfully fetched forecast: ${soilData.length} points for day ${selectedDay}`);
+      return NextResponse.json(response);
+    }
+    
+    // Original single-day logic (for backward compatibility)
     const cacheKey = `soil-data-${layer}`;
     
     // Check cache first
@@ -27,9 +84,12 @@ export async function GET(request: NextRequest) {
     
     console.log(`Fetching fresh data for ${layer}...`);
     
-    // Generate grid points
-    const gridPoints = generatePavlodarGrid();
-    console.log(`Generated ${gridPoints.length} grid points`);
+    // Load North Kazakhstan Oblast boundary
+    const boundary = await fetchNorthKazakhstanBoundary();
+    
+    // Generate grid points inside North Kazakhstan Oblast with higher density
+    const gridPoints = generatePavlodarGrid(0.2, boundary);
+    console.log(`Generated ${gridPoints.length} grid points for North Kazakhstan Oblast`);
     
     // Fetch data from Open-Meteo API
     const soilData = await fetchAllSoilData(gridPoints, layer);

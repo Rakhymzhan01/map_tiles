@@ -34,6 +34,44 @@ export function isPointInPolygon(
 }
 
 /**
+ * Check if a point is inside any of multiple polygons (for combined regions)
+ */
+export function isPointInAnyPolygon(
+  point: [number, number], 
+  boundaries: any
+): boolean {
+  // Handle FeatureCollection (multiple regions)
+  if (boundaries && boundaries.type === 'FeatureCollection' && boundaries.features) {
+    return boundaries.features.some((feature: any) => {
+      if (feature.geometry && feature.geometry.coordinates) {
+        return isPointInPolygon(point, feature.geometry.coordinates);
+      }
+      return false;
+    });
+  }
+  
+  // Handle single Feature
+  if (boundaries && boundaries.geometry && boundaries.geometry.coordinates) {
+    return isPointInPolygon(point, boundaries.geometry.coordinates);
+  }
+  
+  return false;
+}
+
+/**
+ * Check if a point is inside a specific feature (single region)
+ */
+export function isPointInFeature(
+  point: [number, number], 
+  feature: any
+): boolean {
+  if (feature && feature.geometry && feature.geometry.coordinates) {
+    return isPointInPolygon(point, feature.geometry.coordinates);
+  }
+  return false;
+}
+
+/**
  * Get bounding box from polygon for optimization
  */
 export function getBoundingBox(polygon: number[][][]): {

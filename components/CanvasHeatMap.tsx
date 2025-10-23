@@ -10,7 +10,7 @@ import {
   getTemperatureColor,
   getOptimalResolution 
 } from '@/lib/idwInterpolation';
-import { isPointInPolygon } from '@/lib/geoUtils';
+import { isPointInAnyPolygon } from '@/lib/geoUtils';
 
 interface CanvasHeatMapProps {
   data: SoilDataPoint[];
@@ -77,12 +77,12 @@ export default function CanvasHeatMap({ data, layer, boundary }: CanvasHeatMapPr
         const lon = point.lng;
 
         // Skip points outside North Kazakhstan Oblast boundary
-        if (boundary && boundary.geometry && boundary.geometry.coordinates) {
-          if (!isPointInPolygon([lon, lat], boundary.geometry.coordinates)) {
+        if (boundary) {
+          if (!isPointInAnyPolygon([lon, lat], boundary)) {
             continue;
           }
         } else {
-          // Fallback to simple bounding box check
+          // Fallback to North Kazakhstan Oblast bounding box
           if (lat < 51.8 || lat > 55.2 || lon < 66.0 || lon > 72.0) {
             continue;
           }
