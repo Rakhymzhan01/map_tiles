@@ -28,6 +28,7 @@ export default function Map({ layer, showBoundary = true }: MapProps) {
   const [error, setError] = useState<string | null>(null);
   const [dataStats, setDataStats] = useState<DataStats | null>(null);
   const [cursorInfo, setCursorInfo] = useState<{lat: number, lon: number, value: number | null} | null>(null);
+  const [boundary, setBoundary] = useState<any>(null);
 
   const fetchData = async () => {
     try {
@@ -61,6 +62,30 @@ export default function Map({ layer, showBoundary = true }: MapProps) {
       setLoading(false);
     }
   };
+
+  // Load boundary data
+  useEffect(() => {
+    const loadBoundary = async () => {
+      try {
+        const response = await fetch('/api/boundary');
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const result = await response.json();
+        
+        if (result.success) {
+          setBoundary(result.boundary);
+          console.log('🗺️ Boundary loaded:', result.boundary.properties.name);
+        } else {
+          throw new Error(result.error);
+        }
+      } catch (error) {
+        console.error('Failed to load boundary:', error);
+      }
+    };
+    
+    loadBoundary();
+  }, []);
 
   useEffect(() => {
     fetchData();
@@ -170,12 +195,12 @@ export default function Map({ layer, showBoundary = true }: MapProps) {
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       
-      {/* Pavlodar Oblast boundary */}
-      <PavlodarBoundary showBoundary={showBoundary} />
+      {/* Pavlodar Oblast boundary - disabled to remove black dashed line */}
+      {/* <PavlodarBoundary showBoundary={showBoundary} /> */}
       
       {/* Canvas heat map layer */}
       {data.length > 0 && (
-        <CanvasHeatMap data={data} layer={layer} />
+        <CanvasHeatMap data={data} layer={layer} boundary={boundary} />
       )}
 
       {/* Mouse event handler for cursor debugging */}

@@ -8,16 +8,17 @@ import {
   idwInterpolate, 
   getMoistureColor,
   getTemperatureColor,
-  isPointInBounds,
   getOptimalResolution 
 } from '@/lib/idwInterpolation';
+import { isPointInPolygon } from '@/lib/geoUtils';
 
 interface CanvasHeatMapProps {
   data: SoilDataPoint[];
   layer: LayerType;
+  boundary?: any; // GeoJSON Feature
 }
 
-export default function CanvasHeatMap({ data, layer }: CanvasHeatMapProps) {
+export default function CanvasHeatMap({ data, layer, boundary }: CanvasHeatMapProps) {
   const map = useMap();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const overlayRef = useRef<L.ImageOverlay | null>(null);
@@ -75,9 +76,16 @@ export default function CanvasHeatMap({ data, layer }: CanvasHeatMapProps) {
         const lat = point.lat;
         const lon = point.lng;
 
-        // Skip points outside North Kazakhstan Oblast
-        if (!isPointInBounds(lat, lon)) {
-          continue;
+        // Skip points outside North Kazakhstan Oblast boundary
+        if (boundary && boundary.geometry && boundary.geometry.coordinates) {
+          if (!isPointInPolygon([lon, lat], boundary.geometry.coordinates)) {
+            continue;
+          }
+        } else {
+          // Fallback to simple bounding box check
+          if (lat < 51.8 || lat > 55.2 || lon < 66.0 || lon > 72.0) {
+            continue;
+          }
         }
 
         // Calculate interpolated value using IDW
@@ -181,10 +189,10 @@ export default function CanvasHeatMap({ data, layer }: CanvasHeatMapProps) {
     };
   }, [map, data, layer]);
 
-  // Re-render when data or layer changes
+  // Re-render when data, layer, or boundary changes
   useEffect(() => {
     renderHeatMap();
-  }, [data, layer]);
+  }, [data, layer, boundary]);
 
   return null; // This component doesn't render DOM elements directly
 }

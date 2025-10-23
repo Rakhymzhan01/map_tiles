@@ -16,11 +16,17 @@ export function getTemperatureColor(value: number): string {
 
 export function getMoistureColorScale(): Array<{color: string, label: string, range: string}> {
   return [
-    { color: '#8B4513', label: 'Very Dry', range: '< 10%' },
-    { color: '#FFFF00', label: 'Dry', range: '10-20%' },
-    { color: '#00FF00', label: 'Normal', range: '20-30%' },
-    { color: '#87CEEB', label: 'Moist', range: '30-40%' },
-    { color: '#4169E1', label: 'Very Moist', range: '> 40%' }
+    { color: '#5C3317', label: 'Очень сухо', range: '0-5%' },
+    { color: '#8B4513', label: 'Сухо', range: '6-10%' },
+    { color: '#D2691E', label: 'Сухо', range: '11-15%' },
+    { color: '#FF8C00', label: 'Немного сухо', range: '16-20%' },
+    { color: '#FFD700', label: 'Нормально', range: '21-25%' },
+    { color: '#9ACD32', label: 'Нормально', range: '26-30%' },
+    { color: '#32CD32', label: 'Влажно', range: '31-35%' },
+    { color: '#00CC66', label: 'Влажно', range: '36-40%' },
+    { color: '#00CED1', label: 'Очень влажно', range: '41-45%' },
+    { color: '#4169E1', label: 'Очень влажно', range: '46-50%' },
+    { color: '#0000FF', label: 'Насыщено', range: '50%+' }
   ];
 }
 

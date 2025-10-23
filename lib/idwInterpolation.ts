@@ -46,16 +46,21 @@ export function idwInterpolate(
  * Get smooth gradient color for moisture (raw percentage values 0-100%)
  */
 export function getMoistureColor(value: number): { r: number; g: number; b: number } {
-  // Define color stops with RGB values for moisture percentages
+  // Enhanced color stops with better contrast for 5% intervals
   const colorStops = [
-    { value: 0, r: 139, g: 69, b: 19 },    // 0%: Dark brown #8B4513 (Very Dry)
-    { value: 10, r: 255, g: 255, b: 0 },   // 10%: Yellow #FFFF00 (Dry)
-    { value: 20, r: 255, g: 255, b: 0 },   // 20%: Yellow #FFFF00 (Dry)
-    { value: 30, r: 0, g: 255, b: 0 },     // 30%: Green #00FF00 (Normal)
-    { value: 40, r: 135, g: 206, b: 235 }, // 40%: Sky blue #87CEEB (Moist)
-    { value: 50, r: 0, g: 191, b: 255 },   // 50%: Deep sky blue #00BFFF (Very Moist)
-    { value: 60, r: 65, g: 105, b: 225 },  // 60%: Royal blue #4169E1 (Wet)
-    { value: 100, r: 0, g: 0, b: 139 }     // 100%: Dark blue #00008B (Extremely Wet)
+    { value: 0,  r: 92,  g: 51,  b: 23 },   // 0%:   Dark brown #5C3317 (Очень сухо)
+    { value: 5,  r: 139, g: 69,  b: 19 },   // 5%:   Saddle brown #8B4513 (Сухо)
+    { value: 10, r: 210, g: 105, b: 30 },   // 10%:  Chocolate #D2691E (Сухо)
+    { value: 15, r: 255, g: 140, b: 0 },    // 15%:  Dark orange #FF8C00 (Немного сухо)
+    { value: 20, r: 255, g: 215, b: 0 },    // 20%:  Gold #FFD700 (Нормально)
+    { value: 25, r: 154, g: 205, b: 50 },   // 25%:  Yellow-green #9ACD32 (Нормально)
+    { value: 30, r: 50,  g: 205, b: 50 },   // 30%:  Lime green #32CD32 (Влажно)
+    { value: 35, r: 0,   g: 204, b: 102 },  // 35%:  Green #00CC66 (Влажно)
+    { value: 40, r: 0,   g: 206, b: 209 },  // 40%:  Turquoise #00CED1 (Очень влажно)
+    { value: 45, r: 65,  g: 105, b: 225 },  // 45%:  Royal blue #4169E1 (Очень влажно)
+    { value: 50, r: 0,   g: 0,   b: 255 },  // 50%:  Blue #0000FF (Насыщено)
+    { value: 60, r: 0,   g: 0,   b: 139 },  // 60%:  Dark blue #00008B (Переувлажнено)
+    { value: 100, r: 0,  g: 0,   b: 100 }   // 100%: Navy #000064 (Экстремально влажно)
   ];
 
   // Clamp value to reasonable moisture range
