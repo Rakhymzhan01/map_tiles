@@ -1,0 +1,64 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 0, 0, 0;
+  --background-start-rgb: 214, 219, 220;
+  --background-end-rgb: 255, 255, 255;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --foreground-rgb: 255, 255, 255;
+    --background-start-rgb: 0, 0, 0;
+    --background-end-rgb: 0, 0, 0;
+  }
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: linear-gradient(
+      to bottom,
+      transparent,
+      rgb(var(--background-end-rgb))
+    )
+    rgb(var(--background-start-rgb));
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+/* Leaflet map styles */
+.leaflet-container {
+  height: 100vh;
+  width: 100vw;
+}
+
+/* Fix for Leaflet popup z-index issues */
+.leaflet-popup-pane {
+  z-index: 1000 !important;
+}
+
+/* Ensure map controls are above other elements */
+.leaflet-control-container {
+  z-index: 1000 !important;
+}
+
+/* Ensure heat map stays below tile labels for better visibility */
+.leaflet-overlay-pane {
+  z-index: 200 !important; /* Keep heat map below labels */
+}
+
+/* Make tile layer labels more visible over heat map */
+.leaflet-tile-pane {
+  z-index: 100 !important; /* Base map tiles */
+}
+
+/* Enhance text visibility on OpenStreetMap tiles */
+.leaflet-tile {
+  filter: contrast(1.1) brightness(1.05); /* Slightly enhance contrast for better text visibility */
+}
