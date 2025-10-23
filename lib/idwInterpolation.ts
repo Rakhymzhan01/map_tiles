@@ -91,20 +91,52 @@ export function getMoistureColor(value: number): { r: number; g: number; b: numb
 }
 
 /**
- * Get smooth gradient color for temperature (-10 to 40°C)
+ * Enhanced color gradient for Soil Temperature with 3°C intervals
+ * Optimized for high visual contrast between adjacent ranges
  */
 export function getTemperatureColor(value: number): { r: number; g: number; b: number } {
+  // Detailed color stops with 3°C intervals for -10°C to 50°C range
   const colorStops = [
-    { value: -10, r: 0, g: 0, b: 255 },      // -10°C: Blue #0000FF
-    { value: 0, r: 135, g: 206, b: 235 },    // 0°C: Sky blue #87CEEB
-    { value: 10, r: 144, g: 238, b: 144 },   // 10°C: Light green #90EE90
-    { value: 20, r: 255, g: 255, b: 0 },     // 20°C: Yellow #FFFF00
-    { value: 30, r: 255, g: 140, b: 0 },     // 30°C: Dark orange #FF8C00
-    { value: 40, r: 255, g: 69, b: 0 }       // 40°C: Red-orange #FF4500
+    // Freezing range (high contrast blues/purples)
+    { value: -10, r: 25,  g: 25,  b: 112 },   // -10°C: Midnight blue #191970
+    { value: -7,  r: 0,   g: 0,   b: 139 },   // -7°C:  Dark blue #00008B
+    { value: -4,  r: 0,   g: 0,   b: 205 },   // -4°C:  Medium blue #0000CD
+    { value: -1,  r: 0,   g: 0,   b: 255 },   // -1°C:  Blue #0000FF
+    
+    // Cold range (blues to cyan)
+    { value: 2,   r: 30,  g: 144, b: 255 },   // 2°C:   Dodger blue #1E90FF
+    { value: 5,   r: 0,   g: 191, b: 255 },   // 5°C:   Deep sky blue #00BFFF
+    { value: 8,   r: 0,   g: 255, b: 255 },   // 8°C:   Cyan #00FFFF
+    
+    // Cool range (cyan to green)
+    { value: 11,  r: 64,  g: 224, b: 208 },   // 11°C:  Turquoise #40E0D0
+    { value: 14,  r: 0,   g: 255, b: 127 },   // 14°C:  Spring green #00FF7F
+    { value: 17,  r: 50,  g: 205, b: 50 },    // 17°C:  Lime green #32CD32
+    
+    // Moderate range (greens to yellow-green)
+    { value: 20,  r: 127, g: 255, b: 0 },     // 20°C:  Chartreuse #7FFF00
+    { value: 23,  r: 154, g: 205, b: 50 },    // 23°C:  Yellow-green #9ACD32
+    { value: 26,  r: 173, g: 255, b: 47 },    // 26°C:  Green-yellow #ADFF2F
+    
+    // Warm range (yellows)
+    { value: 29,  r: 255, g: 255, b: 0 },     // 29°C:  Yellow #FFFF00
+    { value: 32,  r: 255, g: 215, b: 0 },     // 32°C:  Gold #FFD700
+    
+    // Hot range (oranges)
+    { value: 35,  r: 255, g: 165, b: 0 },     // 35°C:  Orange #FFA500
+    { value: 38,  r: 255, g: 140, b: 0 },     // 38°C:  Dark orange #FF8C00
+    
+    // Very hot range (reds)
+    { value: 41,  r: 255, g: 69,  b: 0 },     // 41°C:  Orange-red #FF4500
+    { value: 44,  r: 255, g: 0,   b: 0 },     // 44°C:  Red #FF0000
+    { value: 47,  r: 178, g: 34,  b: 34 },    // 47°C:  Firebrick #B22222
+    { value: 50,  r: 139, g: 0,   b: 0 }      // 50°C+: Dark red #8B0000
   ];
 
-  const clampedValue = Math.max(-10, Math.min(40, value));
+  // Clamp value to range
+  const clampedValue = Math.max(-10, Math.min(50, value));
 
+  // Find surrounding color stops
   let lowerStop = colorStops[0];
   let upperStop = colorStops[colorStops.length - 1];
 
@@ -116,9 +148,11 @@ export function getTemperatureColor(value: number): { r: number; g: number; b: n
     }
   }
 
+  // Calculate interpolation factor
   const range = upperStop.value - lowerStop.value;
   const factor = range === 0 ? 0 : (clampedValue - lowerStop.value) / range;
 
+  // Interpolate RGB values
   return {
     r: Math.round(lowerStop.r + factor * (upperStop.r - lowerStop.r)),
     g: Math.round(lowerStop.g + factor * (upperStop.g - lowerStop.g)),

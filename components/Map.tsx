@@ -13,6 +13,10 @@ import MapEventHandler from './MapEventHandler';
 interface MapProps {
   layer: LayerType;
   showBoundary?: boolean;
+  forecastDays?: number;
+  selectedDay?: number;
+  onDatesUpdate?: (dates: string[]) => void;
+  onPrecipitationUpdate?: (precipitation: number[], stats: any) => void;
 }
 
 interface DataStats {
@@ -22,7 +26,14 @@ interface DataStats {
   uniqueCount: number;
 }
 
-export default function Map({ layer, showBoundary = true }: MapProps) {
+export default function Map({ 
+  layer, 
+  showBoundary = true, 
+  forecastDays = 1, 
+  selectedDay = 0,
+  onDatesUpdate,
+  onPrecipitationUpdate 
+}: MapProps) {
   const [data, setData] = useState<SoilDataPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -35,26 +46,52 @@ export default function Map({ layer, showBoundary = true }: MapProps) {
       setLoading(true);
       setError(null);
       
-      const response = await fetch(`/api/soil-data?layer=${layer}`);
+      // Build URL with forecast parameters
+      const url = forecastDays > 1 || selectedDay > 0 
+        ? `/api/soil-data?layer=${layer}&days=${forecastDays}&day=${selectedDay}`
+        : `/api/soil-data?layer=${layer}`;
+      
+      const response = await fetch(url);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
-      const result: SoilDataApiResponse = await response.json();
+      const result = await response.json();
       setData(result.data);
       
+      // Update dates if this is a forecast request
+      if (result.forecast && onDatesUpdate) {
+        onDatesUpdate(result.forecast.dates);
+      }
+      
+      // Update precipitation data if available
+      if (result.forecast && onPrecipitationUpdate) {
+        onPrecipitationUpdate(
+          result.forecast.precipitation || [], 
+          result.forecast.precipitationStats || null
+        );
+      }
+      
       // Calculate and set data statistics for debugging
-      const values = result.data.map(d => d.value);
+      const values = result.data.map((d: any) => d.value);
       const stats = {
         min: Math.min(...values),
         max: Math.max(...values),
-        average: values.reduce((a, b) => a + b, 0) / values.length,
+        average: values.reduce((a: number, b: number) => a + b, 0) / values.length,
         uniqueCount: new Set(values).size
       };
       setDataStats(stats);
       
-      console.log(`📊 ${layer} data loaded:`, stats);
+      // Debug: Show sample data values to verify different days have different data
+      const sampleData = result.data.slice(0, 3).map((d: any) => ({
+        coords: `${d.lat?.toFixed(1)},${d.lon?.toFixed(1)}`,
+        value: d.value?.toFixed(1),
+        date: d.date || 'current'
+      }));
+      
+      console.log(`📊 ${layer} data loaded (day ${selectedDay}/${forecastDays}):`, stats);
+      console.log(`📍 Sample data points:`, sampleData);
     } catch (err) {
       console.error('Failed to fetch data:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch data');
@@ -90,11 +127,12 @@ export default function Map({ layer, showBoundary = true }: MapProps) {
   useEffect(() => {
     fetchData();
     
-    // Auto-refresh every hour
-    const interval = setInterval(fetchData, 3600000);
-    
-    return () => clearInterval(interval);
-  }, [layer]);
+    // Auto-refresh every hour (but not for forecasts as they don't change that often)
+    if (forecastDays <= 1 && selectedDay === 0) {
+      const interval = setInterval(fetchData, 3600000);
+      return () => clearInterval(interval);
+    }
+  }, [layer, forecastDays, selectedDay]);
 
   const getColor = (value: number): string => {
     return layer === 'moisture' ? getOldMoistureColor(value) : getOldTemperatureColor(value);
@@ -108,13 +146,53 @@ export default function Map({ layer, showBoundary = true }: MapProps) {
     return layer === 'moisture' ? 'Soil Moisture' : 'Soil Temperature';
   };
 
+  const calculateTrend = (allDays: any[]): { trend: 'increasing' | 'decreasing' | 'stable', change: number } => {
+    if (!allDays || allDays.length < 2) return { trend: 'stable', change: 0 };
+    
+    const first = allDays[0].value;
+    const last = allDays[allDays.length - 1].value;
+    const change = last - first;
+    
+    if (Math.abs(change) < (layer === 'moisture' ? 2 : 1)) return { trend: 'stable', change };
+    return { trend: change > 0 ? 'increasing' : 'decreasing', change };
+  };
+
+  const getTrendIcon = (trend: 'increasing' | 'decreasing' | 'stable'): string => {
+    switch (trend) {
+      case 'increasing': return '📈';
+      case 'decreasing': return '📉';
+      case 'stable': return '➡️';
+    }
+  };
+
+  const getTrendText = (trend: 'increasing' | 'decreasing' | 'stable'): string => {
+    switch (trend) {
+      case 'increasing': return 'Растёт';
+      case 'decreasing': return 'Падает';
+      case 'stable': return 'Стабильно';
+    }
+  };
+
   if (loading) {
+    const loadingText = forecastDays > 1 
+      ? `Loading ${forecastDays}-day forecast...`
+      : `Loading ${getLayerName().toLowerCase()} data...`;
+    
+    const subText = forecastDays > 1
+      ? `Fetching weather data in batches to avoid rate limits (~${Math.ceil(127 / 10) * 1.1} seconds)`
+      : "This may take 10-30 seconds for the first load";
+    
     return (
       <div className="flex items-center justify-center h-full bg-gray-100">
         <div className="text-center">
           <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500 mx-auto"></div>
-          <p className="mt-4 text-lg text-gray-600">Loading {getLayerName().toLowerCase()} data...</p>
-          <p className="text-sm text-gray-500">This may take 10-30 seconds for the first load</p>
+          <p className="mt-4 text-lg text-gray-600">{loadingText}</p>
+          <p className="text-sm text-gray-500">{subText}</p>
+          {forecastDays > 1 && (
+            <div className="mt-2 text-xs text-blue-600">
+              Processing {Math.ceil(127 / 10)} batches with delays to respect API limits
+            </div>
+          )}
         </div>
       </div>
     );
@@ -231,12 +309,35 @@ export default function Map({ layer, showBoundary = true }: MapProps) {
               <p className="text-2xl font-bold" style={{ color: getColor(point.value) }}>
                 {formatValue(point.value)}
               </p>
-              <p className="text-sm text-gray-600">
+              
+              {/* Show trend if we have forecast data */}
+              {(point as any).allDays && (point as any).allDays.length > 1 && (() => {
+                const trendInfo = calculateTrend((point as any).allDays);
+                return (
+                  <div className="mt-2 p-2 bg-gray-50 rounded">
+                    <div className="text-sm font-medium">
+                      {getTrendIcon(trendInfo.trend)} {getTrendText(trendInfo.trend)}
+                    </div>
+                    <div className="text-xs text-gray-600">
+                      Изменение за {(point as any).allDays.length} дней: {trendInfo.change > 0 ? '+' : ''}{trendInfo.change.toFixed(1)}{layer === 'moisture' ? '%' : '°C'}
+                    </div>
+                  </div>
+                );
+              })()}
+              
+              <p className="text-sm text-gray-600 mt-2">
                 Coordinates: {point.lat.toFixed(1)}°N, {point.lon.toFixed(1)}°E
               </p>
               <p className="text-xs text-gray-500">
-                Updated: {new Date(point.timestamp).toLocaleString()}
+                {(point as any).date ? `Дата: ${(point as any).date}` : `Updated: ${new Date(point.timestamp).toLocaleString()}`}
               </p>
+              
+              {/* Show current day info if forecast */}
+              {forecastDays > 1 && (
+                <p className="text-xs text-blue-600 font-medium">
+                  День {selectedDay + 1} из {forecastDays}
+                </p>
+              )}
             </div>
           </Popup>
         </CircleMarker>

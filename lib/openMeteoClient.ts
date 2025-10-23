@@ -96,6 +96,7 @@ export interface ForecastDataPoint {
   value: number;
   date: string;
   time: string;
+  precipitation: number; // Daily precipitation in mm
 }
 
 export interface SoilForecastResult {
@@ -110,37 +111,81 @@ export interface SoilForecastResult {
 export async function fetchSoilForecast(
   point: GridPoint,
   layer: LayerType,
-  forecastDays: number = 7
+  forecastDays: number = 7,
+  maxRetries: number = 2
 ): Promise<SoilForecastResult | null> {
-  try {
-    const parameter = layer === 'moisture' 
-      ? 'soil_moisture_10_to_40cm'
-      : 'soil_temperature_10_to_40cm';
-    
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${point.lat}&longitude=${point.lon}&hourly=${parameter}&forecast_days=${forecastDays}&timezone=Asia/Almaty`;
-    
-    const response = await fetch(url);
-    
-    if (!response.ok) {
-      console.warn(`Failed to fetch forecast for ${point.lat}, ${point.lon}: ${response.status}`);
-      return null;
-    }
-    
-    const data = await response.json();
-    
-    if (!data.hourly || !data.hourly[parameter]) {
-      console.warn(`No forecast data available for ${point.lat}, ${point.lon}`);
-      return null;
-    }
+  const parameter = layer === 'moisture' 
+    ? 'soil_moisture_10_to_40cm'
+    : 'soil_temperature_10_to_40cm';
+  
+  // Add precipitation to all requests to show rain predictions
+  const baseUrl = 'https://api.open-meteo.com/v1/forecast';
+  const params = new URLSearchParams({
+    latitude: point.lat.toString(),
+    longitude: point.lon.toString(),
+    hourly: `${parameter},precipitation`,
+    forecast_days: forecastDays.toString(),
+    timezone: 'Asia/Almaty'
+  });
+  
+  const url = `${baseUrl}?${params}`;
+  
+  // Retry logic for rate limiting and failures
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, {
+        signal: AbortSignal.timeout(15000), // 15 second timeout
+      });
+      
+      // Handle 429 Rate Limit with retry
+      if (response.status === 429) {
+        if (attempt < maxRetries) {
+          const waitTime = (attempt + 1) * 1000; // 1s, 2s exponential backoff
+          console.log(`⚠️ Rate limit (429) for ${point.lat.toFixed(1)},${point.lon.toFixed(1)}. Retrying in ${waitTime}ms... (attempt ${attempt + 1}/${maxRetries})`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+          continue; // Try again
+        }
+        console.error(`❌ Rate limit exceeded for ${point.lat}, ${point.lon} after ${maxRetries} retries`);
+        return null;
+      }
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      
+      if (!data.hourly || !data.hourly[parameter]) {
+        throw new Error('Invalid forecast data structure');
+      }
+      
+      const times = data.hourly.time;
+      const values = data.hourly[parameter];
+      const precipitation = data.hourly.precipitation || [];
+      
+      // CRITICAL: Log raw API response for first point only
+      if (Math.abs(point.lat - 53.2) < 0.1 && Math.abs(point.lon - 68.5) < 0.1) {
+        console.log(`\n🔍 RAW API RESPONSE for point (${point.lat}, ${point.lon}):`);
+        console.log(`Parameter: ${parameter}`);
+        console.log(`Total hours returned: ${times.length}`);
+        console.log('First 5 hours:');
+        for (let i = 0; i < Math.min(5, times.length); i++) {
+          console.log(`  ${times[i]}: ${values[i]} | rain: ${precipitation[i] || 0}mm`);
+        }
+        console.log('\nEvery 24 hours (daily samples):');
+        for (let i = 0; i < Math.min(forecastDays * 24, times.length); i += 24) {
+          const dayNum = Math.floor(i/24);
+          console.log(`  Day ${dayNum}: ${times[i]} → ${values[i]} (midnight), ${times[i + 12] || 'N/A'} → ${values[i + 12] || 'N/A'} (noon)`);
+        }
+      }
     
     // Group by day (take noon value for each day as representative)
     const dailyData: ForecastDataPoint[] = [];
-    const times = data.hourly.time;
-    const values = data.hourly[parameter];
     
-    for (let i = 0; i < times.length; i += 24) {
-      // Take value at 12:00 (noon) for each day
-      const noonIndex = i + 12;
+    for (let day = 0; day < forecastDays; day++) {
+      // Calculate index for noon (12:00) of each day
+      const noonIndex = day * 24 + 12;
+      
       if (noonIndex < values.length && values[noonIndex] !== null) {
         let processedValue = values[noonIndex];
         
@@ -151,26 +196,103 @@ export async function fetchSoilForecast(
           }
         }
         
+        // Calculate total precipitation for the day (sum all 24 hours)
+        const dayStart = day * 24;
+        const dayEnd = Math.min((day + 1) * 24, precipitation.length);
+        const dailyPrecip = precipitation
+          .slice(dayStart, dayEnd)
+          .reduce((sum, val) => sum + (val || 0), 0);
+        
         dailyData.push({
           lat: point.lat,
           lon: point.lon,
           date: times[noonIndex].split('T')[0], // YYYY-MM-DD
           time: times[noonIndex],
-          value: processedValue
+          value: processedValue,
+          precipitation: dailyPrecip // Total rain for the day in mm
         });
       }
     }
     
-    return {
-      lat: point.lat,
-      lon: point.lon,
-      forecast: dailyData
-    };
+    // Log daily extraction for verification on first point
+    if (Math.abs(point.lat - 53.2) < 0.1 && Math.abs(point.lon - 68.5) < 0.1) {
+      console.log('\n📊 EXTRACTED DAILY DATA:');
+      dailyData.forEach(d => {
+        const rainStatus = d.precipitation > 0 ? `☔ ${d.precipitation.toFixed(1)}mm` : '☀️ Без осадков';
+        console.log(`  Day ${dailyData.indexOf(d)} (${d.date}): ${d.value.toFixed(2)} | ${rainStatus}`);
+      });
+      
+      // Show precipitation pattern
+      console.log('\n🌧️ PRECIPITATION PATTERN:');
+      const totalRain = dailyData.reduce((sum, d) => sum + d.precipitation, 0);
+      console.log(`  Total rain over ${forecastDays} days: ${totalRain.toFixed(1)}mm`);
+      const rainyDays = dailyData.filter(d => d.precipitation > 0.1).length;
+      console.log(`  Rainy days: ${rainyDays}/${forecastDays}`);
+      
+      // Explain soil moisture stability
+      if (totalRain < 5) {
+        console.log(`  💡 LOW RAIN → Soil moisture expected to remain stable`);
+      } else {
+        console.log(`  💡 SIGNIFICANT RAIN → Soil moisture should increase after rain days`);
+      }
+    }
     
-  } catch (error) {
-    console.error(`Error fetching forecast for ${point.lat}, ${point.lon}:`, error);
-    return null;
+      return {
+        lat: point.lat,
+        lon: point.lon,
+        forecast: dailyData
+      };
+      
+    } catch (error) {
+      if (attempt === maxRetries) {
+        if (error.name === 'TimeoutError') {
+          console.error(`⏰ Timeout fetching forecast for ${point.lat}, ${point.lon} after ${maxRetries + 1} attempts`);
+        } else {
+          console.error(`❌ Failed to fetch forecast for ${point.lat}, ${point.lon} after ${maxRetries + 1} attempts:`, error.message);
+        }
+        return null;
+      }
+      // Wait before retry (except for 429 which has its own retry logic)
+      if (!error.message?.includes('429')) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
   }
+  
+  return null;
+}
+
+/**
+ * Fetch forecasts in batches to avoid overwhelming the API
+ */
+export async function fetchAllSoilForecasts(
+  points: GridPoint[],
+  layer: LayerType,
+  forecastDays: number = 7
+): Promise<SoilForecastResult[]> {
+  console.log(`Fetching ${forecastDays}-day forecasts for ${points.length} points...`);
+  
+  const batchSize = 20; // Fetch 20 points at a time
+  const results: SoilForecastResult[] = [];
+  
+  for (let i = 0; i < points.length; i += batchSize) {
+    const batch = points.slice(i, i + batchSize);
+    console.log(`Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(points.length / batchSize)}`);
+    
+    const batchPromises = batch.map(point => fetchSoilForecast(point, layer, forecastDays));
+    const batchResults = await Promise.all(batchPromises);
+    
+    const validResults = batchResults.filter((result): result is SoilForecastResult => result !== null);
+    results.push(...validResults);
+    
+    // Add a small delay between batches to be nice to the API
+    if (i + batchSize < points.length) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  }
+  
+  console.log(`Successfully fetched ${results.length}/${points.length} forecast points`);
+  return results;
 }
 
 export async function fetchAllSoilData(

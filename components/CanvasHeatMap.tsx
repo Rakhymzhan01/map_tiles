@@ -154,6 +154,15 @@ export default function CanvasHeatMap({ data, layer, boundary }: CanvasHeatMapPr
     imageOverlay.addTo(map);
     overlayRef.current = imageOverlay;
 
+    // Log temperature color mapping preview for verification
+    if (layer === 'temperature') {
+      console.log('🌡️ Temperature color mapping preview:');
+      [-5, 0, 5, 10, 15, 20, 25, 30, 35, 40].forEach(temp => {
+        const rgb = getTemperatureColor(temp);
+        console.log(`${temp}°C → rgb(${rgb.r}, ${rgb.g}, ${rgb.b}) → #${rgb.r.toString(16).padStart(2,'0')}${rgb.g.toString(16).padStart(2,'0')}${rgb.b.toString(16).padStart(2,'0')}`);
+      });
+    }
+
     console.log(`✅ Canvas heat map rendered (${canvas.width}x${canvas.height}, resolution: ${resolution})`);
   };
 
